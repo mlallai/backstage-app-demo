@@ -64,6 +64,7 @@ The automated process in built into a GitHub Action and available on `.github/wo
 - The process is automated and triggered by merges into the main branch.
 - The Docker image is pushed to AWS Elastic Container Registry.
 - A cluster on AWS Elastic Container Service builds a container with our Docker image and exposes the correct port. AWS ECS is used for its simplicity compared to Kubernetes.
+- Each build triggers a deployment on the ECS cluster.
 - A load balancer redirects requests to the container.
 - The application connects to a managed PostgreSQL database on AWS RDS, which is not publicly accessible but resides in the same VPC as the cluster.
 - Fargate is used for serverless management, providing a quick deployment method.

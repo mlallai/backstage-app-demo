@@ -1,6 +1,6 @@
 app:
   title: Matthieu Lallaï Backstage Demo Application
-  baseUrl: http://backstage-service-3-lb-618052225.eu-west-3.elb.amazonaws.com
+  baseUrl: http://localhost:7007
 
 organization:
   name: Matthieu Lallaï
@@ -12,7 +12,7 @@ backend:
   # auth:
   #   keys:
   #     - secret: ${BACKEND_SECRET}
-  baseUrl: http://backstage-service-3-lb-618052225.eu-west-3.elb.amazonaws.com
+  baseUrl: http://localhost:7007
   listen:
     port: 7007
     # Uncomment the following host directive to bind to specific interfaces
