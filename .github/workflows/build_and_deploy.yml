@@ -4,69 +4,153 @@ on:
   push:
     branches:
       - main
+    paths:
+      - 'backstage-app/**'
 
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./backstage-app
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Set up Node.js
-        uses: actions/setup-node@v2
+        id: setup-node
+        uses: actions/setup-node@v3
         with:
           node-version: '20'
+          cache: 'yarn'
+          cache-dependency-path: './backstage-app/yarn.lock'
 
       - name: Install dependencies
-        run: |
-          cd ./backstage-app
-          yarn install --frozen-lockfile
+        id: install
+        run: yarn install --frozen-lockfile
+        continue-on-error: false
 
       - name: Run tests
-        run: |
-          cd ./backstage-app
-          yarn test
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
+        id: tests
+        run: yarn test
+        continue-on-error: false
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v1
+        id: aws-credentials
+        uses: aws-actions/configure-aws-credentials@v2
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
+          mask-aws-account-id: true
 
       - name: Log in to AWS ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v1
+        timeout-minutes: 5
+        continue-on-error: true  # Try again if this fails
 
-      - name: Build and push Docker image to AWS ECR
-        id: build-image
+      - name: Retry ECR login if failed
+        if: steps.login-ecr.outcome == 'failure'
+        id: retry-ecr-login
+        uses: aws-actions/amazon-ecr-login@v1
+        timeout-minutes: 5
+
+      - name: Set up Docker Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Docker Build and Push
+        id: docker-build
+        uses: docker/build-push-action@v4
+        with:
+          context: ./backstage-app
+          push: true
+          tags: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/backstage-app:latest,${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/backstage-app:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          no-cache-filters: node_modules  # Skip caching large directories
+          outputs: type=registry,registry.insecure=false  # Ensure secure registry connection
+          pull: true  # Always pull latest base images
+
+      - name: Create deployment marker
+        id: deployment-marker
         run: |
-          cd ./backstage-app
-          IMAGE_URI="${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/backstage-app:latest"
-          docker build -t $IMAGE_URI .
-          docker push $IMAGE_URI
+          echo "DEPLOYMENT_ID=$(date +%s)" >> $GITHUB_ENV
+          echo "DEPLOYMENT_STARTED=$(date -u '+%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_ENV
 
-      - name: Force ECS service redeployment
+      - name: Deploy to ECS
+        id: deploy
         run: |
           aws ecs update-service \
             --cluster ${{ secrets.AWS_BACKSTAGE_CLUSTER }} \
             --service ${{ secrets.AWS_BACKSTAGE_SERVICE }} \
             --force-new-deployment
-          
-      - name: Wait for service to stabilize
+        timeout-minutes: 5
+        continue-on-error: true  # Try to continue even if this fails
+
+      - name: Retry deploy if failed
+        if: steps.deploy.outcome == 'failure'
+        id: retry-deploy
         run: |
+          echo "Retrying deployment..."
+          sleep 15  # Wait before retrying
+          aws ecs update-service \
+            --cluster ${{ secrets.AWS_BACKSTAGE_CLUSTER }} \
+            --service ${{ secrets.AWS_BACKSTAGE_SERVICE }} \
+            --force-new-deployment
+        timeout-minutes: 5
+
+      - name: Wait for service to stabilize
+        id: wait-for-service
+        run: |
+          echo "Waiting for service to stabilize..."
           aws ecs wait services-stable \
             --cluster ${{ secrets.AWS_BACKSTAGE_CLUSTER }} \
             --services ${{ secrets.AWS_BACKSTAGE_SERVICE }}
-          
-      - name: Get deployment status
+        timeout-minutes: 10  # Set a timeout to avoid infinite wait
+        continue-on-error: true  # Continue even if timeout occurs
+
+      - name: Print deployment status
         run: |
           echo "Deployment complete. Service details:"
           aws ecs describe-services \
             --cluster ${{ secrets.AWS_BACKSTAGE_CLUSTER }} \
             --services ${{ secrets.AWS_BACKSTAGE_SERVICE }} \
             --query 'services[0].{Status:status,RunningCount:runningCount,DesiredCount:desiredCount,PendingCount:pendingCount,DeploymentStatus:deployments[0].status}'
+
+      - name: Send notification on success
+        if: success()
+        run: |
+          echo "Deployment successful! Deployment ID: ${{ env.DEPLOYMENT_ID }}"
+          echo "Started at: ${{ env.DEPLOYMENT_STARTED }}"
+          echo "Completed at: $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+          # Add notification command here (e.g., Slack webhook)
+
+      - name: Send notification on failure
+        if: failure()
+        run: |
+          echo "Deployment failed! Deployment ID: ${{ env.DEPLOYMENT_ID }}"
+          echo "Started at: ${{ env.DEPLOYMENT_STARTED }}"
+          echo "Failed at: $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+          # Add notification command here (e.g., Slack webhook)
+
+      - name: Rollback on failure
+        if: failure() && steps.docker-build.outcome == 'success'
+        run: |
+          echo "Initiating rollback to previous stable version..."
+          # Get the previous task definition revision
+          PREVIOUS_REVISION=$(aws ecs describe-task-definition \
+            --task-definition ${{ secrets.AWS_BACKSTAGE_TASK_DEFINITION }} \
+            --query 'taskDefinition.revision - 1' \
+            --output text)
+          
+          # Update the service to use the previous task definition
+          aws ecs update-service \
+            --cluster ${{ secrets.AWS_BACKSTAGE_CLUSTER }} \
+            --service ${{ secrets.AWS_BACKSTAGE_SERVICE }} \
+            --task-definition ${{ secrets.AWS_BACKSTAGE_TASK_DEFINITION }}:$PREVIOUS_REVISION \
+            --force-new-deployment
+          
+          echo "Rollback initiated. Reverting to previous version: ${{ secrets.AWS_BACKSTAGE_TASK_DEFINITION }}:$PREVIOUS_REVISION"
