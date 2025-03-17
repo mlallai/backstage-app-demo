@@ -10,11 +10,14 @@ Start by cloning the project repository:
 git clone git@github.com:mlallai/backstage-app-demo.git
 ```
 
-### 🚀 Step 1: Local Deployment
+### 🚀 Step 1: Local Setup and Working Locally
+
+Follow these steps to set up and run the Backstage instance locally:
 
 #### 📋 Prerequisites
 
 - 🐳 Docker installed
+- 🐳 Docker Compose installed
 
 #### 🛠️ Instructions
 
@@ -30,14 +33,15 @@ git clone git@github.com:mlallai/backstage-app-demo.git
    cp backstage-app/.env.yarn.example backstage-app/.env.yarn
    ```
 
-2. 🔑 Create a GitHub OAuth App. Follow [this link](https://github.com/settings/applications/new) to create the app. Retrieve the `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, and `GITHUB_USERNAME` from GitHub and paste the values into the `backstage-app/.env` and `backstage-app/.env.yarn` files. Homepage URL should be `http://localhost:7000` and Authorization callback URL should be http://`localhost:7007/api/auth/github/handler/frame`
+2. 🔑 Create a GitHub OAuth App. Follow [this link](https://github.com/settings/applications/new) to create the app. Retrieve the `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, and `GITHUB_USERNAME` (your username) from GitHub and paste the values into the `backstage-app/.env` and `backstage-app/.env.yarn` files.
+   _Note: OAuth App Homepage URL should be `http://localhost:7000` and Authorization callback URL should be `http://localhost:7007/api/auth/github/handler/frame`_
 
 3. 🔑 Generate a GitHub token. Follow [this link](https://github.com/settings/tokens/new) to create a new token. Retrieve the `GITHUB_TOKEN` and paste its value into the `backstage-app/.env` and `backstage-app/.env.yarn` files.
 
 4. 📂 Navigate to the `backstage-app` directory and run the docker-compose file:
    ```sh
    cd backstage-app
-   docker-compose up --build -d
+   docker compose up --build -d
    ```
 5. 🌐 Open your browser and go to [http://localhost:7007](http://localhost:7007).
 
@@ -45,9 +49,10 @@ git clone git@github.com:mlallai/backstage-app-demo.git
 
 - Use Docker and docker-compose to spin up everything with one command, ensuring consistency across environments.
 
-### 🌐 Step 2: Automated Deployment Process
+### 🌐 Step 2: Checkout the Automated Deployment Process
 
 The application is available here: [Backstage Service](http://backstage-service-3-lb-618052225.eu-west-3.elb.amazonaws.com/)
+The automated process in built into a GitHub Action and available on `.github/workflows/build_and_deploy.yml`
 
 #### 📋 Technical Implementation Notes
 
@@ -74,7 +79,7 @@ The application is available here: [Backstage Service](http://backstage-service-
 
 ### 🌐 Step 3: Local Kubernetes Deployment
 
-For technical exercise purposes, we aslo built the configuration for a full deployment on a Kubernetes cluster. This can be locally deployed on Minikube with a single command that sets up the cluster using the files in the Kubernetes subfolder.
+For technical exercise purposes, we also built the configuration for a full deployment on a Kubernetes cluster. This can be locally deployed on Minikube with a single command that sets up the cluster using the files in the Kubernetes subfolder.
 
 #### 📋 Prerequisites
 
@@ -87,10 +92,12 @@ For technical exercise purposes, we aslo built the configuration for a full depl
 1. 📜 Run the deployment script:
 
    ```sh
-   sh deploy.sh
+      sh deploy.sh
    ```
 
-2. 🌐 Open your browser and go to the testing URL provided by the Kubernetes service at the end of the script deployment
+   _Note: If there are issues starting Minikube, run `minikube delete` and then run the script again._
+
+2. 🌐 Open your browser and go to the testing URL for Backstage app provided by the Kubernetes service at the end of the script deployment
 
 3. Optionally, to access Grafana, open a new tab, use port-forward with `kubectl port-forward svc/monitoring-grafana 3000:80 -n backstage`, open your browser and go to [http://localhost:3000](http://localhost:3000) to access the Grafana dashboard (default username: `admin` / default password: `prom-operator`)
 
@@ -101,6 +108,7 @@ For technical exercise purposes, we aslo built the configuration for a full depl
 
 #### 💡 Potential Improvements
 
+- Configure Grafana dashboards.
 - Use Helm charts more extensively.
 - Implement Argo CD to define all infrastructure and switch to a declarative mode.
 - Add a load balancer or ingress file to handle external traffic.

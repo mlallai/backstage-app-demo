@@ -52,8 +52,6 @@ if [ $? -ne 0 ]; then
     check_status "Minikube startup"
 else
     echo "${YELLOW}⚠️ Minikube is already running. Restarting Minikube...${NC}"
-    minikube stop
-    check_status "Minikube stop"
     minikube start
     check_status "Minikube restart"
 fi
