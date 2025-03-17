@@ -35,6 +35,7 @@
 
 - 🐳 Minikube installed ([installation guide](https://minikube.sigs.k8s.io/docs/start/))
 - 📦 kubectl installed ([installation guide](https://kubernetes.io/docs/tasks/tools/install-kubectl/))
+- ⎈ Helm installed ([installation guide](https://helm.sh/docs/intro/install/))
 
 #### 🛠️ Instructions
 
