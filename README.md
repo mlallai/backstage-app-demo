@@ -49,6 +49,10 @@ Follow these steps to set up and run the Backstage instance locally:
 
 - Use Docker and docker-compose to spin up everything with one command, ensuring consistency across environments.
 
+#### 💡 Potential Improvements
+
+- Opt for a cross-platform / cross-environment declarative tool like Score to define one workload that can used everywhere (docker-compose, kubernetes) and remains stack-agnostic.
+
 ### 🌐 Step 2: Checkout the Automated Deployment Process
 
 The application is available here: [Backstage Service](http://backstage-service-3-lb-618052225.eu-west-3.elb.amazonaws.com/)
