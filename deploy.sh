@@ -8,15 +8,15 @@ NC='\033[0m' # No Color
 
 # Function to print step information
 print_step() {
-    echo -e "${GREEN}📍 $1${NC}"
+    echo "${GREEN}📍 $1${NC}"
 }
 
 # Function to check command status
 check_status() {
     if [ $? -eq 0 ]; then
-        echo -e "${GREEN}✅ Success: $1${NC}"
+        echo "${GREEN}✅ Success: $1${NC}"
     else
-        echo -e "${RED}❌ Failed: $1${NC}"
+        echo "${RED}❌ Failed: $1${NC}"
         exit 1
     fi
 }
@@ -32,14 +32,14 @@ check_pod_readiness() {
     while [ $attempt -le $max_attempts ]; do
         status=$(kubectl get pod -n $namespace -l app=$pod_name -o jsonpath='{.items[*].status.phase}')
         if [ "$status" == "Running" ]; then
-            echo -e "${GREEN}✅ Pod $pod_name is ready${NC}"
+            echo "${GREEN}✅ Pod $pod_name is ready${NC}"
             return 0
         fi
         echo "Waiting for pod $pod_name (attempt $attempt/$max_attempts)..."
         sleep 5
         ((attempt++))
     done
-    echo -e "${RED}❌ Pod $pod_name failed to become ready${NC}"
+    echo "${RED}❌ Pod $pod_name failed to become ready${NC}"
     return 1
 }
 
@@ -51,7 +51,11 @@ if [ $? -ne 0 ]; then
     minikube start --driver=docker
     check_status "Minikube startup"
 else
-    echo -e "${GREEN}✅ Minikube is already running${NC}"
+    echo "${YELLOW}⚠️ Minikube is already running. Restarting Minikube...${NC}"
+    minikube stop
+    check_status "Minikube stop"
+    minikube start
+    check_status "Minikube restart"
 fi
 
 # Create Kubernetes resources
@@ -104,20 +108,32 @@ print_step "Creating Backstage service..."
 kubectl apply -f kubernetes/backstage-service.yaml
 check_status "Backstage service"
 
+# Add Prometheus and Grafana to your the cluster
+print_step "Adding Prometheus and Grafana to the cluster..."
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo update
+
+if ! helm ls -n backstage | grep -q monitoring; then
+    helm install monitoring prometheus-community/kube-prometheus-stack --namespace backstage
+else
+    echo "${GREEN}✅ Prometheus and Grafana are already installed${NC}"
+fi
+check_status "Prometheus and Grafana installation"
+
 # Security and status checks
 print_step "Running security and status checks..."
-echo -e "\n${GREEN}Pod Security Contexts:${NC}"
+echo "\n${GREEN}Pod Security Contexts:${NC}"
 kubectl get pods -n backstage -o custom-columns="NAME:.metadata.name,SECURITY_CONTEXT:.spec.securityContext"
 
-echo -e "\n${GREEN}Service Exposure:${NC}"
+echo "\n${GREEN}Service Exposure:${NC}"
 kubectl get svc -n backstage -o custom-columns="NAME:.metadata.name,TYPE:.spec.type,EXTERNAL-IP:.status.loadBalancer.ingress[*].ip"
 
-echo -e "\n${GREEN}Pod Resource Usage:${NC}"
+echo "\n${GREEN}Pod Resource Usage:${NC}"
 kubectl describe pods -n backstage | grep -A 3 "Resources:"
 
 # Show deployment status
 print_step "Deployment completed successfully! 🚀"
-echo -e "\n${GREEN}Current deployments:${NC}"
+echo "\n${GREEN}Current deployments:${NC}"
 kubectl get pods -n backstage
 
 # Get the testing URL
