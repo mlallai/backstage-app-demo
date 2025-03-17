@@ -4,8 +4,6 @@ on:
   push:
     branches:
       - main
-    paths:
-      - 'backstage-app/**'
 
 jobs:
   build-and-deploy:
